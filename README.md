@@ -54,11 +54,11 @@ The server provides the following tools:
 - `get_publication_id(host)`: Get the publication ID from a hostname
 - `search_posts_of_publication(publication_id, query, first=10)`: Search for posts within a specific publication
 - `search_posts_by_hostname(host, query, first=10)`: Search for posts within a publication using its hostname
-- `get_article_details(article_id)`: Get detailed information about a specific article
-- `get_articles_by_username(username)`: Get articles written by a specific user
-- `get_user_info(username)`: Get information about a Dev.to user
-- `create_article(title, body_markdown, tags, published)`: Create and publish a new article
-- `update_article(article_id, title, body_markdown, tags, published)`: Update an existing article
+- `get_article_details(article_id)`: Get detailed information about a specific article [Coming Soon]
+- `get_articles_by_username(username)`: Get articles written by a specific user [Coming Soon]
+- `get_user_info(username)`: Get information about a Dev.to user [Coming Soon]
+- `create_article(title, body_markdown, tags, published)`: Create and publish a new article [Coming Soon]
+- `update_article(article_id, title, body_markdown, tags, published)`: Update an existing article [Coming Soon]
 
 ### Example Usage
 
