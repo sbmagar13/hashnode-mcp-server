@@ -5,12 +5,11 @@ from dotenv import load_dotenv
 from typing import List, Optional, Dict, Any
 from mcp.server.fastmcp import FastMCP, Context
 from hashnode_mcp.utils import (
-    format_posts,
-    format_search_results,
+    format_article_creation,
+    format_article_update,
     TEST_QUERY,
-    GET_PUBLICATION_ID_QUERY,
-    GET_PUBLICATION_POSTS_QUERY,
-    SEARCH_POSTS_OF_PUBLICATION_QUERY
+    CREATE_ARTICLE_MUTATION,
+    UPDATE_ARTICLE_MUTATION
 )
 
 load_dotenv()
@@ -23,28 +22,102 @@ mcp = FastMCP(
     instructions="""
     # Hashnode API Server
     
-    This server provides access to Hashnode content through various tools.
+    This server provides access to Hashnode content through three tools.
     
     ## Available Tools
     - `test_api_connection()` - Test the connection to the Hashnode API
-    - `get_publication_posts(host, first=5)` - Get posts from a specific publication
-    - `get_publication_id(host)` - Get the publication ID from a hostname
-    - `search_posts_of_publication(publication_id, query, first=10)` - Search for posts within a specific publication
-    - `search_posts_by_hostname(host, query, first=10)` - Search for posts within a publication using its hostname
+    - `create_article(title, body_markdown, tags="", published=False)` - Create and publish a new article on Hashnode
+    - `update_article(article_id, title=None, body_markdown=None, tags=None, published=None)` - Update an existing article on Hashnode
     
     ## When to use what
-    - For publication-specific content: Use `get_publication_posts(host)`
-    - For getting a publication ID: Use `get_publication_id(host)`
-    - For searching within a publication (with ID): Use `search_posts_of_publication(publication_id, query)`
-    - For searching within a publication (with hostname): Use `search_posts_by_hostname(host, query)`
+    - For testing API connection: Use `test_api_connection()`
+    - For creating a new article: Use `create_article(title, body_markdown, tags, published)`
+    - For updating an existing article: Use `update_article(article_id, title, body_markdown, tags, published)`
     
     ## Example Queries
-    - "Get posts from publication blog.example.com" → Use `get_publication_posts("blog.example.com")`
-    - "Get the ID for publication blog.example.com" → Use `get_publication_id("blog.example.com")`
-    - "Search for 'docker' in publication with ID 123" → Use `search_posts_of_publication("123", "docker")`
-    - "Search for 'docker' in publication blog.example.com" → Use `search_posts_by_hostname("blog.example.com", "docker")`
+    - "Test the API connection" → Use `test_api_connection()`
+    - "Create a new article" → Use `create_article("My Title", "Content in markdown", "tag1,tag2", True)`
+    - "Update an article" → Use `update_article("article_id_here", "New Title", "Updated content", "tag1,tag2", True)`
     """
 )
+
+@mcp.tool()
+async def update_article(article_id: str, title: str = None, body_markdown: str = None, tags: str = None, published: bool = None) -> str:
+    """
+    Update an existing article on Hashnode
+    
+    Args:
+        article_id: The ID of the article to update
+        title: New title for the article (optional)
+        body_markdown: New content in markdown format (optional)
+        tags: New comma-separated list of tags (optional)
+        published: Change publish status (optional)
+    """
+    try:
+        # Prepare the input variables
+        input_vars = {
+            "id": article_id
+        }
+        
+        # Add optional fields if provided
+        if title is not None:
+            input_vars["title"] = title
+            
+        if body_markdown is not None:
+            input_vars["contentMarkdown"] = body_markdown
+        
+        # Set publishedAt if the article should be published immediately
+        if published is not None and published:
+            from datetime import datetime
+            # Format the current date and time in ISO format for GraphQL DateTime
+            input_vars["publishedAt"] = datetime.utcnow().isoformat() + "Z"
+        
+        # Add tags if provided
+        if tags is not None:
+            tag_list = []
+            for tag in tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    # For each tag, create a PublishPostTagInput object
+                    # We'll use name and slug since we don't have access to tag IDs
+                    tag_list.append({
+                        "name": tag,
+                        "slug": tag.lower().replace(' ', '-')
+                    })
+            
+            if tag_list:
+                input_vars["tags"] = tag_list
+        
+        variables = {
+            "input": input_vars
+        }
+        
+        print(f"Updating article with ID '{article_id}'")
+        print(f"Query: {UPDATE_ARTICLE_MUTATION}")
+        print(f"Variables: {json.dumps(variables)}")
+        
+        data = await fetch_from_api(UPDATE_ARTICLE_MUTATION, variables)
+        print(f"Response from API: {json.dumps(data)}")
+        
+        if not data or "data" not in data:
+            return f"Error: No data returned from API. Full response: {json.dumps(data)}"
+        
+        if "errors" in data:
+            return f"API returned errors: {json.dumps(data['errors'])}"
+        
+        return format_article_update(data)
+    except Exception as e:
+        print(f"Error updating article: {str(e)}")
+        error_message = f"Error updating article with ID '{article_id}': {str(e)}"
+        
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_content = e.response.text
+                error_message += f"\nResponse content: {error_content}"
+            except:
+                pass
+        
+        return error_message
 
 async def fetch_from_api(query: str, variables: dict = None) -> dict:
     """Helper function to fetch data from Hashnode API using GraphQL"""
@@ -90,121 +163,102 @@ async def test_api_connection() -> str:
     except Exception as e:
         return f"API connection failed: {str(e)}"
 
-@mcp.tool()
-async def get_publication_posts(host: str, first: int = 5) -> str:
-    """
-    Fetch posts from a specific publication on Hashnode
-    
-    Args:
-        host: The hostname of the publication (e.g., "blog.budhathokisagar.com.np")
-        first: Number of posts to fetch (default: 5)
-    """
-    variables = {
-        "host": host,
-        "first": first
-    }
-    
-    try:
-        print(f"Fetching posts from publication '{host}'")
-        print(f"Query: {GET_PUBLICATION_POSTS_QUERY}")
-        print(f"Variables: {json.dumps(variables)}")
-        
-        data = await fetch_from_api(GET_PUBLICATION_POSTS_QUERY, variables)
-        return format_posts(data)
-    except Exception as e:
-        print(f"Error getting publication posts: {str(e)}")
-        error_message = f"Error fetching posts from publication '{host}': {str(e)}"
-        
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_content = e.response.text
-                error_message += f"\nResponse content: {error_content}"
-            except:
-                pass
-        
-        return error_message
 
 @mcp.tool()
-async def get_publication_id(host: str) -> str:
+async def create_article(title: str, body_markdown: str, tags: str = "", published: bool = False) -> str:
     """
-    Get the publication ID from a hostname
+    Create and publish a new article on Hashnode
     
     Args:
-        host: The hostname of the publication (e.g., "blog.budhathokisagar.com.np")
-    """
-    variables = {
-        "host": host
-    }
-    
-    try:
-        print(f"Getting publication ID for '{host}'")
-        print(f"Query: {GET_PUBLICATION_ID_QUERY}")
-        print(f"Variables: {json.dumps(variables)}")
-        
-        data = await fetch_from_api(GET_PUBLICATION_ID_QUERY, variables)
-        
-        if not data or "data" not in data or not data["data"] or "publication" not in data["data"] or not data["data"]["publication"]:
-            return f"No publication found for hostname '{host}'."
-        
-        publication = data["data"]["publication"]
-        publication_id = publication.get("id")
-        title = publication.get("title", "Untitled")
-        
-        if not publication_id:
-            return f"Could not find ID for publication '{title}' with hostname '{host}'."
-        
-        return f"Publication: {title}\nID: {publication_id}"
-    except Exception as e:
-        print(f"Error getting publication ID: {str(e)}")
-        error_message = f"Error getting publication ID for '{host}': {str(e)}"
-        
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_content = e.response.text
-                error_message += f"\nResponse content: {error_content}"
-            except:
-                pass
-        
-        return error_message
-
-@mcp.tool()
-async def search_posts_by_hostname(host: str, query: str, first: int = 10, after: Optional[str] = None) -> str:
-    """
-    Search for posts within a publication using its hostname
-    
-    Args:
-        host: The hostname of the publication (e.g., "blog.budhathokisagar.com.np")
-        query: The search query
-        first: Number of posts to fetch (default: 10)
-        after: Cursor for pagination (optional)
+        title: The title of the article
+        body_markdown: The content of the article in markdown format
+        tags: Comma-separated list of tags (e.g., "python,tutorial,webdev")
+        published: Whether to publish immediately (True) or save as draft (False)
     """
     try:
+        # First, we need to get the user's publications
+        # We'll use a simple query to get the user's publications
+        user_query = """
+        query {
+          me {
+            publications(first: 10) {
+              edges {
+                node {
+                  id
+                  title
+                }
+              }
+            }
+          }
+        }
+        """
+        
+        print("Getting user's publications")
+        user_data = await fetch_from_api(user_query)
+        print(f"User data response: {json.dumps(user_data)}")
+        
+        if not user_data or "data" not in user_data or not user_data["data"] or "me" not in user_data["data"] or not user_data["data"]["me"] or "publications" not in user_data["data"]["me"] or not user_data["data"]["me"]["publications"] or "edges" not in user_data["data"]["me"]["publications"] or not user_data["data"]["me"]["publications"]["edges"]:
+            return "Could not find user's publications. Please make sure you have a publication set up on Hashnode."
+        
+        # Use the first publication in the list
+        if len(user_data["data"]["me"]["publications"]["edges"]) == 0:
+            return "No publications found for the user. Please create a publication on Hashnode first."
+        
+        publication = user_data["data"]["me"]["publications"]["edges"][0]["node"]
+        publication_id = publication["id"]
+        publication_title = publication["title"]
+        print(f"Found publication: {publication_title} (ID: {publication_id})")
+        
+        # Prepare the input variables
+        input_vars = {
+            "title": title,
+            "contentMarkdown": body_markdown,
+            "publicationId": publication_id
+        }
+        
+        # Set publishedAt if the article should be published immediately
+        if published:
+            from datetime import datetime
+            # Format the current date and time in ISO format for GraphQL DateTime
+            input_vars["publishedAt"] = datetime.utcnow().isoformat() + "Z"
+        
         variables = {
-            "host": host
+            "input": input_vars
         }
         
-        print(f"Getting publication ID for '{host}'")
-        print(f"Query: {GET_PUBLICATION_ID_QUERY}")
+        # Add tags if provided
+        if tags:
+            tag_list = []
+            for tag in tags.split(','):
+                tag = tag.strip()
+                if tag:
+                    # For each tag, create a PublishPostTagInput object
+                    # We'll use name and slug since we don't have access to tag IDs
+                    tag_list.append({
+                        "name": tag,
+                        "slug": tag.lower().replace(' ', '-')
+                    })
+            
+            if tag_list:
+                variables["input"]["tags"] = tag_list
+        
+        print(f"Creating article with title '{title}'")
+        print(f"Query: {CREATE_ARTICLE_MUTATION}")
         print(f"Variables: {json.dumps(variables)}")
         
-        data = await fetch_from_api(GET_PUBLICATION_ID_QUERY, variables)
+        data = await fetch_from_api(CREATE_ARTICLE_MUTATION, variables)
+        print(f"Response from API: {json.dumps(data)}")
         
-        if not data or "data" not in data or not data["data"] or "publication" not in data["data"] or not data["data"]["publication"]:
-            return f"No publication found for hostname '{host}'."
+        if not data or "data" not in data:
+            return f"Error: No data returned from API. Full response: {json.dumps(data)}"
         
-        publication = data["data"]["publication"]
-        publication_id = publication.get("id")
-        title = publication.get("title", "Untitled")
+        if "errors" in data:
+            return f"API returned errors: {json.dumps(data['errors'])}"
         
-        if not publication_id:
-            return f"Could not find ID for publication '{title}' with hostname '{host}'."
-        
-        print(f"Found publication ID '{publication_id}' for '{title}'")
-        
-        return await search_posts_of_publication(publication_id, query, first, after)
+        return format_article_creation(data)
     except Exception as e:
-        print(f"Error searching posts by hostname: {str(e)}")
-        error_message = f"Error searching for '{query}' in publication with hostname '{host}': {str(e)}"
+        print(f"Error creating article: {str(e)}")
+        error_message = f"Error creating article '{title}': {str(e)}"
         
         if hasattr(e, 'response') and e.response is not None:
             try:
@@ -215,45 +269,6 @@ async def search_posts_by_hostname(host: str, query: str, first: int = 10, after
         
         return error_message
 
-@mcp.tool()
-async def search_posts_of_publication(publication_id: str, query: str, first: int = 10, after: Optional[str] = None) -> str:
-    """
-    Search for posts within a specific publication on Hashnode
-    
-    Args:
-        publication_id: The ID of the publication to search within
-        query: The search query
-        first: Number of posts to fetch (default: 10)
-        after: Cursor for pagination (optional)
-    """
-    variables = {
-        "first": first,
-        "after": after,
-        "filter": {
-            "publicationId": publication_id,
-            "query": query
-        }
-    }
-    
-    try:
-        print(f"Searching for '{query}' in publication '{publication_id}'")
-        print(f"Query: {SEARCH_POSTS_OF_PUBLICATION_QUERY}")
-        print(f"Variables: {json.dumps(variables)}")
-        
-        data = await fetch_from_api(SEARCH_POSTS_OF_PUBLICATION_QUERY, variables)
-        return format_search_results(data)
-    except Exception as e:
-        print(f"Error searching posts: {str(e)}")
-        error_message = f"Error searching for '{query}' in publication '{publication_id}': {str(e)}"
-        
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                error_content = e.response.text
-                error_message += f"\nResponse content: {error_content}"
-            except:
-                pass
-        
-        return error_message
 
 def main():
     """Entry point for the package."""

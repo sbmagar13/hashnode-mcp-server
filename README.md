@@ -54,11 +54,14 @@ The server provides the following tools:
 - `get_publication_id(host)`: Get the publication ID from a hostname
 - `search_posts_of_publication(publication_id, query, first=10)`: Search for posts within a specific publication
 - `search_posts_by_hostname(host, query, first=10)`: Search for posts within a publication using its hostname
-- `get_article_details(article_id)`: Get detailed information about a specific article [Coming Soon]
+- `get_article_details(article_id)`: Get detailed information about a specific article
 - `get_articles_by_username(username)`: Get articles written by a specific user [Coming Soon]
 - `get_user_info(username)`: Get information about a Dev.to user [Coming Soon]
-- `create_article(title, body_markdown, tags, published)`: Create and publish a new article [Coming Soon]
-- `update_article(article_id, title, body_markdown, tags, published)`: Update an existing article [Coming Soon]
+- `create_article(title, body_markdown, tags, published)`: Create and publish a new article
+- `update_article(article_id, title, body_markdown, tags, published)`: Update an existing article
+- `toggle_follow(username)`: Follow or unfollow a user based on the specified username
+- `publish_draft(draft_id)`: Publish a draft with the specified ID
+- `create_webhook(publication_host, url, events, secret)`: Create a webhook for the publication
 
 ### Example Usage
 
@@ -83,6 +86,48 @@ search_results = client.use_tool("search_posts_by_hostname", {
     "first": 5
 })
 print(search_results)
+
+# Get detailed information about a specific article
+article_details = client.use_tool("get_article_details", {"article_id": "123456"})
+print(article_details)
+
+# Create a new article
+new_article = client.use_tool("create_article", {
+    "title": "My New Article",
+    "body_markdown": "# Hello World\n\nThis is my first article on Hashnode!",
+    "tags": "python,tutorial,beginners",
+    "published": False  # Save as draft
+})
+print(new_article)
+
+# Update an existing article
+updated_article = client.use_tool("update_article", {
+    "article_id": "123456",
+    "title": "Updated Title",
+    "published": True  # Publish the article
+})
+print(updated_article)
+
+# Follow a user
+follow_result = client.use_tool("toggle_follow", {
+    "username": "johndoe"
+})
+print(follow_result)
+
+# Publish a draft
+published_draft = client.use_tool("publish_draft", {
+    "draft_id": "789012"
+})
+print(published_draft)
+
+# Create a webhook
+webhook = client.use_tool("create_webhook", {
+    "publication_host": "blog.example.com",
+    "url": "https://webhook.site/123456",
+    "events": "post_published,post_updated",
+    "secret": "my_secret_key"
+})
+print(webhook)
 ```
 
 ## Environment Variables
