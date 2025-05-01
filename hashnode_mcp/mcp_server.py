@@ -32,18 +32,21 @@ mcp = FastMCP(
     - `create_article(title, body_markdown, tags="", published=False)` - Create and publish a new article on Hashnode
     - `update_article(article_id, title=None, body_markdown=None, tags=None, published=None)` - Update an existing article on Hashnode
     - `get_latest_articles(hostname, limit=10)` - Get the latest articles from a Hashnode publication by hostname
+    - `search_articles(query, page=1)` - Search for articles on Hashnode
     
     ## When to use what
     - For testing API connection: Use `test_api_connection()`
     - For creating a new article: Use `create_article(title, body_markdown, tags, published)`
     - For updating an existing article: Use `update_article(article_id, title, body_markdown, tags, published)`
     - For getting latest articles: Use `get_latest_articles(hostname, limit)`
+    - For searching articles: Use `search_articles(query, page)`
     
     ## Example Queries
     - "Test the API connection" → Use `test_api_connection()`
     - "Create a new article" → Use `create_article("My Title", "Content in markdown", "tag1,tag2", True)`
     - "Update an article" → Use `update_article("article_id_here", "New Title", "Updated content", "tag1,tag2", True)`
     - "Get latest articles" → Use `get_latest_articles("blog.example.com", 5)`
+    - "Search for articles about Python" → Use `search_articles("Python", 1)`
     """
 )
 
@@ -139,18 +142,20 @@ async def fetch_from_api(query: str, variables: dict = None) -> dict:
     request_data = {"query": query, "variables": variables}
     print(f"Sending request to {HASHNODE_API_URL} with data: {json.dumps(request_data)}")
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:  # Increased timeout to 120 seconds
         try:
             response = await client.post(
                 HASHNODE_API_URL,
                 json=request_data,
-                headers=headers,
-                timeout=30.0  # Increased timeout to 30 seconds
+                headers=headers
             )
             response.raise_for_status()
             result = response.json()
             print(f"Response: {json.dumps(result)}")
             return result
+        except httpx.TimeoutException:
+            print("Request timed out. Consider optimizing the query or increasing the timeout.")
+            raise Exception("API request timed out after 120 seconds. The Hashnode API might be experiencing high load.")
         except Exception as e:
             print(f"Error in API request: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
@@ -185,12 +190,14 @@ async def create_article(title: str, body_markdown: str, tags: str = "", publish
         published: Whether to publish immediately (True) or save as draft (False)
     """
     try:
+        print(f"Starting article creation process for '{title}'")
+        
+        # Optimized query that combines getting publication info and creating article
         # First, we need to get the user's publications
-        # We'll use a simple query to get the user's publications
         user_query = """
         query {
           me {
-            publications(first: 10) {
+            publications(first: 1) {
               edges {
                 node {
                   id
@@ -202,9 +209,8 @@ async def create_article(title: str, body_markdown: str, tags: str = "", publish
         }
         """
         
-        print("Getting user's publications")
+        print("Getting user's publications (limited to first publication)")
         user_data = await fetch_from_api(user_query)
-        print(f"User data response: {json.dumps(user_data)}")
         
         if not user_data or "data" not in user_data or not user_data["data"] or "me" not in user_data["data"] or not user_data["data"]["me"] or "publications" not in user_data["data"]["me"] or not user_data["data"]["me"]["publications"] or "edges" not in user_data["data"]["me"]["publications"] or not user_data["data"]["me"]["publications"]["edges"]:
             return "Could not find user's publications. Please make sure you have a publication set up on Hashnode."
@@ -242,7 +248,6 @@ async def create_article(title: str, body_markdown: str, tags: str = "", publish
                 tag = tag.strip()
                 if tag:
                     # For each tag, create a PublishPostTagInput object
-                    # We'll use name and slug since we don't have access to tag IDs
                     tag_list.append({
                         "name": tag,
                         "slug": tag.lower().replace(' ', '-')
@@ -252,22 +257,116 @@ async def create_article(title: str, body_markdown: str, tags: str = "", publish
                 variables["input"]["tags"] = tag_list
         
         print(f"Creating article with title '{title}'")
-        print(f"Query: {CREATE_ARTICLE_MUTATION}")
         print(f"Variables: {json.dumps(variables)}")
         
-        data = await fetch_from_api(CREATE_ARTICLE_MUTATION, variables)
-        print(f"Response from API: {json.dumps(data)}")
-        
-        if not data or "data" not in data:
-            return f"Error: No data returned from API. Full response: {json.dumps(data)}"
-        
-        if "errors" in data:
-            return f"API returned errors: {json.dumps(data['errors'])}"
-        
-        return format_article_creation(data)
+        try:
+            data = await fetch_from_api(CREATE_ARTICLE_MUTATION, variables)
+            
+            if not data or "data" not in data:
+                return f"Error: No data returned from API. Full response: {json.dumps(data)}"
+            
+            if "errors" in data:
+                return f"API returned errors: {json.dumps(data['errors'])}"
+            
+            return format_article_creation(data)
+        except Exception as e:
+            if "timeout" in str(e).lower():
+                return f"The article creation request timed out, but the article might still have been created. Please check your Hashnode dashboard. Error details: {str(e)}"
+            raise
     except Exception as e:
         print(f"Error creating article: {str(e)}")
         error_message = f"Error creating article '{title}': {str(e)}"
+        
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_content = e.response.text
+                error_message += f"\nResponse content: {error_content}"
+            except:
+                pass
+        
+        return error_message
+
+
+@mcp.tool()
+async def search_articles(query: str, page: int = 1) -> str:
+    """
+    Search for articles on Hashnode
+    
+    Args:
+        query: Search term to find articles
+        page: Page number for pagination (default: 1)
+    """
+    try:
+        print(f"Starting article search for query '{query}', page {page}")
+        
+        # Optimized query that gets only the first publication
+        user_query = """
+        query {
+          me {
+            publications(first: 1) {
+              edges {
+                node {
+                  id
+                  title
+                }
+              }
+            }
+          }
+        }
+        """
+        
+        print("Getting user's publications for search (limited to first publication)")
+        user_data = await fetch_from_api(user_query)
+        
+        if not user_data or "data" not in user_data or not user_data["data"] or "me" not in user_data["data"] or not user_data["data"]["me"] or "publications" not in user_data["data"]["me"] or not user_data["data"]["me"]["publications"] or "edges" not in user_data["data"]["me"]["publications"] or not user_data["data"]["me"]["publications"]["edges"]:
+            return "Could not find user's publications. Please make sure you have a publication set up on Hashnode."
+        
+        # Use the first publication in the list
+        if len(user_data["data"]["me"]["publications"]["edges"]) == 0:
+            return "No publications found for the user. Please create a publication on Hashnode first."
+        
+        publication = user_data["data"]["me"]["publications"]["edges"][0]["node"]
+        publication_id = publication["id"]
+        publication_title = publication["title"]
+        print(f"Found publication: {publication_title} (ID: {publication_id})")
+        
+        # Calculate pagination parameters - limit to 5 results per page to reduce response size
+        per_page = 5  # Reduced number of results per page
+        first = per_page
+        after = None
+        if page > 1:
+            after = f"offset_{(page-1)*per_page}"
+        
+        # Search for posts in this publication
+        search_variables = {
+            "first": first,
+            "after": after,
+            "filter": {
+                "publicationId": publication_id,
+                "query": query  # The search query
+            }
+        }
+        
+        print(f"Searching for articles with query '{query}' in publication '{publication_title}'")
+        
+        try:
+            search_data = await fetch_from_api(SEARCH_POSTS_OF_PUBLICATION_QUERY, search_variables)
+            
+            if not search_data or "data" not in search_data:
+                return f"Error: No data returned from API. Full response: {json.dumps(search_data)}"
+            
+            if "errors" in search_data:
+                return f"API returned errors: {json.dumps(search_data['errors'])}"
+            
+            # Format the search results
+            return format_search_results(search_data)
+        except Exception as e:
+            if "timeout" in str(e).lower():
+                return f"The search request timed out. Try a more specific search query or try again later. Error details: {str(e)}"
+            raise
+    except Exception as e:
+        print(f"Error searching articles: {str(e)}")
+        error_message = f"Error searching for articles with query '{query}': {str(e)}"
         
         if hasattr(e, 'response') and e.response is not None:
             try:

@@ -277,13 +277,12 @@ SEARCH_POSTS_OF_PUBLICATION_QUERY = """
 query SearchPostsOfPublication(
   $first: Int!,
   $after: String,
-  $sortBy: PostSortBy,
   $filter: SearchPostsOfPublicationFilter!
 ) {
   searchPostsOfPublication(
     first: $first,
     after: $after,
-    sortBy: $sortBy,
+    sortBy: DATE_PUBLISHED_DESC,
     filter: $filter
   ) {
     edges {
@@ -301,6 +300,104 @@ query SearchPostsOfPublication(
     pageInfo {
       hasNextPage
       endCursor
+    }
+  }
+}
+"""
+
+GET_TOP_ARTICLES_QUERY = """
+query GetTopArticles($first: Int!) {
+  feed(first: $first) {
+    edges {
+      node {
+        ... on Post {
+          id
+          title
+          brief
+          url
+          publishedAt
+          author {
+            name
+            username
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+GET_ARTICLES_BY_TAG_QUERY = """
+query GetArticlesByTag($tag: String!, $first: Int!) {
+  tag(slug: $tag) {
+    name
+    slug
+    posts(first: $first) {
+      edges {
+        node {
+          id
+          title
+          brief
+          url
+          publishedAt
+          author {
+            name
+            username
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+GET_USER_INFO_QUERY = """
+query GetUserInfo($username: String!) {
+  user(username: $username) {
+    id
+    name
+    username
+    profilePicture
+    bio {
+      text
+    }
+    socialMediaLinks {
+      twitter
+      github
+      linkedin
+      website
+    }
+    publications(first: 5) {
+      edges {
+        node {
+          id
+          title
+          url
+        }
+      }
+    }
+    followersCount
+    followingsCount
+  }
+}
+"""
+
+GET_ARTICLES_BY_USERNAME_QUERY = """
+query GetArticlesByUsername($username: String!, $first: Int!) {
+  user(username: $username) {
+    id
+    name
+    username
+    posts(first: $first) {
+      edges {
+        node {
+          id
+          title
+          brief
+          url
+          publishedAt
+        }
+      }
     }
   }
 }
@@ -607,3 +704,193 @@ def format_post_details(post_data: dict) -> str:
         return result
     
     return "No post data found."
+
+def format_top_articles(top_articles_data: dict) -> str:
+    """
+    Format top articles data for display
+    
+    Args:
+        top_articles_data: The data returned from the Hashnode API for top articles
+        
+    Returns:
+        A formatted string representation of the top articles
+    """
+    if not top_articles_data or "data" not in top_articles_data or not top_articles_data["data"]:
+        return "No top articles data found."
+    
+    if "feed" in top_articles_data["data"] and "edges" in top_articles_data["data"]["feed"]:
+        edges = top_articles_data["data"]["feed"]["edges"]
+        result = "# Top Articles on Hashnode\n\n"
+        
+        if not edges:
+            return "No top articles found."
+        
+        for edge in edges:
+            if "node" in edge:
+                node = edge["node"]
+                title = node.get("title", "Untitled")
+                result += f"## {title}\n"
+                
+                if "id" in node:
+                    result += f"ID: {node['id']}\n"
+                
+                if "url" in node:
+                    result += f"URL: {node['url']}\n"
+                
+                if "author" in node and node["author"]:
+                    author = node["author"]
+                    result += f"Author: {author.get('name', 'Unknown')}"
+                    if "username" in author:
+                        result += f" (@{author['username']})"
+                    result += "\n"
+                
+                if "publishedAt" in node and node["publishedAt"]:
+                    from datetime import datetime
+                    try:
+                        published_date = datetime.fromisoformat(node["publishedAt"].replace("Z", "+00:00"))
+                        result += f"Published: {published_date.strftime('%b %d, %Y')}\n"
+                    except:
+                        result += f"Published: {node['publishedAt']}\n"
+                
+                if "brief" in node and node["brief"]:
+                    brief = node["brief"]
+                    max_length = 200
+                    if len(brief) > max_length:
+                        brief = brief[:max_length] + "..."
+                    result += f"Description: {brief}\n"
+                
+                result += "\n"
+        
+        return result
+    
+    return "No top articles data found."
+
+def format_articles_by_tag(tag_data: dict) -> str:
+    """
+    Format articles by tag data for display
+    
+    Args:
+        tag_data: The data returned from the Hashnode API for articles by tag
+        
+    Returns:
+        A formatted string representation of the articles by tag
+    """
+    if not tag_data or "data" not in tag_data or not tag_data["data"]:
+        return "No tag data found."
+    
+    if "tag" in tag_data["data"] and tag_data["data"]["tag"]:
+        tag = tag_data["data"]["tag"]
+        tag_name = tag.get("name", tag.get("slug", "Unknown Tag"))
+        result = f"# Articles with Tag: {tag_name}\n\n"
+        
+        if "posts" not in tag or "edges" not in tag["posts"] or not tag["posts"]["edges"]:
+            return f"No articles found with tag '{tag_name}'."
+        
+        for edge in tag["posts"]["edges"]:
+            if "node" in edge:
+                node = edge["node"]
+                title = node.get("title", "Untitled")
+                result += f"## {title}\n"
+                
+                if "id" in node:
+                    result += f"ID: {node['id']}\n"
+                
+                if "url" in node:
+                    result += f"URL: {node['url']}\n"
+                
+                if "author" in node and node["author"]:
+                    author = node["author"]
+                    result += f"Author: {author.get('name', 'Unknown')}"
+                    if "username" in author:
+                        result += f" (@{author['username']})"
+                    result += "\n"
+                
+                if "publishedAt" in node and node["publishedAt"]:
+                    from datetime import datetime
+                    try:
+                        published_date = datetime.fromisoformat(node["publishedAt"].replace("Z", "+00:00"))
+                        result += f"Published: {published_date.strftime('%b %d, %Y')}\n"
+                    except:
+                        result += f"Published: {node['publishedAt']}\n"
+                
+                if "brief" in node and node["brief"]:
+                    brief = node["brief"]
+                    max_length = 200
+                    if len(brief) > max_length:
+                        brief = brief[:max_length] + "..."
+                    result += f"Description: {brief}\n"
+                
+                result += "\n"
+        
+        return result
+    
+    return "No tag data found."
+
+def format_user_info(user_data: dict) -> str:
+    """
+    Format user information data for display
+    
+    Args:
+        user_data: The data returned from the Hashnode API for a specific user
+        
+    Returns:
+        A formatted string representation of the user information
+    """
+    if not user_data or "data" not in user_data or not user_data["data"]:
+        return "No user data found."
+    
+    if "user" in user_data["data"] and user_data["data"]["user"]:
+        user = user_data["data"]["user"]
+        result = f"# User: {user.get('name', 'Unknown')}\n\n"
+        
+        # Basic user information
+        result += "## User Information\n\n"
+        result += f"ID: {user.get('id', 'Unknown')}\n"
+        result += f"Username: {user.get('username', 'Unknown')}\n"
+        
+        if "profilePicture" in user and user["profilePicture"]:
+            result += f"Profile Picture: {user['profilePicture']}\n"
+        
+        if "followersCount" in user:
+            result += f"Followers: {user['followersCount']}\n"
+        
+        if "followingsCount" in user:
+            result += f"Following: {user['followingsCount']}\n"
+        
+        # Bio
+        if "bio" in user and user["bio"] and "text" in user["bio"] and user["bio"]["text"]:
+            result += f"\n## Bio\n\n{user['bio']['text']}\n"
+        
+        # Social media links
+        if "socialMediaLinks" in user and user["socialMediaLinks"]:
+            social_media = user["socialMediaLinks"]
+            result += "\n## Social Media\n\n"
+            
+            if "twitter" in social_media and social_media["twitter"]:
+                result += f"Twitter: {social_media['twitter']}\n"
+            
+            if "github" in social_media and social_media["github"]:
+                result += f"GitHub: {social_media['github']}\n"
+            
+            if "linkedin" in social_media and social_media["linkedin"]:
+                result += f"LinkedIn: {social_media['linkedin']}\n"
+            
+            if "website" in social_media and social_media["website"]:
+                result += f"Website: {social_media['website']}\n"
+        
+        # Publications
+        if "publications" in user and "edges" in user["publications"] and user["publications"]["edges"]:
+            result += "\n## Publications\n\n"
+            for edge in user["publications"]["edges"]:
+                if "node" in edge:
+                    node = edge["node"]
+                    result += f"- {node.get('title', 'Untitled')}"
+                    
+                    if "url" in node and node["url"]:
+                        result += f" ({node['url']})"
+                    
+                    result += "\n"
+        
+        return result
+    
+    return "No user data found."
