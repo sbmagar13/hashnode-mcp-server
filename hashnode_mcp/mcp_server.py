@@ -7,9 +7,12 @@ from mcp.server.fastmcp import FastMCP, Context
 from hashnode_mcp.utils import (
     format_article_creation,
     format_article_update,
+    format_search_results,
     TEST_QUERY,
     CREATE_ARTICLE_MUTATION,
-    UPDATE_ARTICLE_MUTATION
+    UPDATE_ARTICLE_MUTATION,
+    SEARCH_POSTS_OF_PUBLICATION_QUERY,
+    GET_PUBLICATION_ID_QUERY
 )
 
 load_dotenv()
@@ -22,22 +25,25 @@ mcp = FastMCP(
     instructions="""
     # Hashnode API Server
     
-    This server provides access to Hashnode content through three tools.
+    This server provides access to Hashnode content through several tools.
     
     ## Available Tools
     - `test_api_connection()` - Test the connection to the Hashnode API
     - `create_article(title, body_markdown, tags="", published=False)` - Create and publish a new article on Hashnode
     - `update_article(article_id, title=None, body_markdown=None, tags=None, published=None)` - Update an existing article on Hashnode
+    - `get_latest_articles(hostname, limit=10)` - Get the latest articles from a Hashnode publication by hostname
     
     ## When to use what
     - For testing API connection: Use `test_api_connection()`
     - For creating a new article: Use `create_article(title, body_markdown, tags, published)`
     - For updating an existing article: Use `update_article(article_id, title, body_markdown, tags, published)`
+    - For getting latest articles: Use `get_latest_articles(hostname, limit)`
     
     ## Example Queries
     - "Test the API connection" → Use `test_api_connection()`
     - "Create a new article" → Use `create_article("My Title", "Content in markdown", "tag1,tag2", True)`
     - "Update an article" → Use `update_article("article_id_here", "New Title", "Updated content", "tag1,tag2", True)`
+    - "Get latest articles" → Use `get_latest_articles("blog.example.com", 5)`
     """
 )
 
@@ -139,7 +145,7 @@ async def fetch_from_api(query: str, variables: dict = None) -> dict:
                 HASHNODE_API_URL,
                 json=request_data,
                 headers=headers,
-                timeout=10.0
+                timeout=30.0  # Increased timeout to 30 seconds
             )
             response.raise_for_status()
             result = response.json()
@@ -148,7 +154,10 @@ async def fetch_from_api(query: str, variables: dict = None) -> dict:
         except Exception as e:
             print(f"Error in API request: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
-                print(f"Response content: {e.response.text}")
+                try:
+                    print(f"Response content: {e.response.text}")
+                except:
+                    print("Could not get response content")
             raise
 
 
@@ -259,6 +268,115 @@ async def create_article(title: str, body_markdown: str, tags: str = "", publish
     except Exception as e:
         print(f"Error creating article: {str(e)}")
         error_message = f"Error creating article '{title}': {str(e)}"
+        
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_content = e.response.text
+                error_message += f"\nResponse content: {error_content}"
+            except:
+                pass
+        
+        return error_message
+
+
+@mcp.tool()
+async def get_latest_articles(hostname: str, limit: int = 10) -> str:
+    """
+    Get the latest articles from a Hashnode publication by hostname
+    
+    Args:
+        hostname: The hostname of the publication (e.g., "blog.example.com")
+        limit: The number of articles to retrieve (default: 10)
+        
+    Note:
+        If limit is higher than the actual number of available articles,
+        all available articles will be returned.
+    """
+    try:
+        # First, get the publication ID from the hostname
+        variables = {
+            "host": hostname
+        }
+        
+        print(f"Getting publication ID for hostname '{hostname}'")
+        publication_data = await fetch_from_api(GET_PUBLICATION_ID_QUERY, variables)
+        print(f"Publication data response: {json.dumps(publication_data)}")
+        
+        if not publication_data or "data" not in publication_data or not publication_data["data"] or "publication" not in publication_data["data"] or not publication_data["data"]["publication"] or "id" not in publication_data["data"]["publication"]:
+            return f"Could not find publication with hostname '{hostname}'. Please make sure the hostname is correct."
+        
+        publication_id = publication_data["data"]["publication"]["id"]
+        publication_title = publication_data["data"]["publication"]["title"]
+        print(f"Found publication: {publication_title} (ID: {publication_id})")
+        
+        # Simplified approach: just make a single request to get all articles at once
+        all_edges = []
+        
+        # Search for posts in this publication
+        search_variables = {
+            "first": limit,  # Request all articles at once
+            "sortBy": "DATE_PUBLISHED_DESC",
+            "filter": {
+                "publicationId": publication_id,
+                "query": ""  # Empty query to get all articles
+            }
+        }
+        
+        print(f"Searching for {limit} articles in publication '{publication_title}'")
+        search_data = await fetch_from_api(SEARCH_POSTS_OF_PUBLICATION_QUERY, search_variables)
+        
+        if not search_data or "data" not in search_data:
+            return f"Error: No data returned from API. Full response: {json.dumps(search_data)}"
+        
+        if "errors" in search_data:
+            return f"API returned errors: {json.dumps(search_data['errors'])}"
+        
+        if "searchPostsOfPublication" in search_data["data"] and "edges" in search_data["data"]["searchPostsOfPublication"]:
+            edges = search_data["data"]["searchPostsOfPublication"]["edges"]
+            all_edges.extend(edges)
+            print(f"Found {len(edges)} articles")
+        else:
+            print("No articles found in response")
+        
+        # Format the search results
+        result = f"# Latest Articles from {publication_title}\n\n"
+        
+        if not all_edges:
+            return f"No articles found for publication '{publication_title}'."
+        
+        for edge in all_edges:
+            if "node" in edge:
+                node = edge["node"]
+                title = node.get("title", "Untitled")
+                result += f"## {title}\n"
+                
+                if "id" in node:
+                    result += f"ID: {node['id']}\n"
+                
+                if "author" in node and node["author"] and "name" in node["author"]:
+                    result += f"Author: {node['author']['name']}\n"
+                
+                if "publishedAt" in node and node["publishedAt"]:
+                    from datetime import datetime
+                    try:
+                        published_date = datetime.fromisoformat(node["publishedAt"].replace("Z", "+00:00"))
+                        result += f"Published: {published_date.strftime('%b %d')}\n"
+                    except:
+                        result += f"Published: {node['publishedAt']}\n"
+                
+                if "brief" in node and node["brief"]:
+                    brief = node["brief"]
+                    max_length = 200
+                    if len(brief) > max_length:
+                        brief = brief[:max_length] + "..."
+                    result += f"Description: {brief}\n"
+                
+                result += "\n"
+        
+        return result
+    except Exception as e:
+        print(f"Error getting latest articles: {str(e)}")
+        error_message = f"Error getting latest articles for hostname '{hostname}': {str(e)}"
         
         if hasattr(e, 'response') and e.response is not None:
             try:

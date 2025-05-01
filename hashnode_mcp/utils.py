@@ -288,18 +288,12 @@ query SearchPostsOfPublication(
   ) {
     edges {
       node {
+        id
         title
         brief
-        url
-        slug
         publishedAt
         author {
           name
-          username
-          profilePicture
-        }
-        coverImage {
-          url
         }
       }
       cursor
