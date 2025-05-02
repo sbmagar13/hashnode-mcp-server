@@ -4,11 +4,12 @@ A Model Context Protocol (MCP) server for interacting with the Hashnode API. Thi
 
 ## Features
 
-- Test API connection to Hashnode
-- Fetch posts from specific publications
-- Get publication IDs from hostnames
-- Search for posts within publications
-- Detailed formatting of post data and search results
+- Creating and publishing new articles
+- Updating existing articles
+- Searching for articles by keywords
+- Retrieving article details
+- Getting user information
+- Fetching the latest articles from a publication
 
 ## Installation
 
@@ -39,29 +40,41 @@ A Model Context Protocol (MCP) server for interacting with the Hashnode API. Thi
 
 ### Starting the Server
 
-Run the MCP server:
+You have two options for running the server:
+
+#### Option 1: Run the server manually
+
+```bash
+python run_server.py
+```
+
+Or directly using the root file:
 
 ```bash
 python mcp_server.py
 ```
+
+The server will start and listen for connections from AI assistants. By default, it runs on `localhost:8000`.
+
+#### Option 2: Let the MCP integration handle it automatically
+
+When properly configured in Claude Desktop or Cline VSCode extension, the MCP integration will automatically start and manage the server process for you.
+
+### Important Note on File Structure
+
+When configuring your MCP server in Claude Desktop or Cline VSCode extension, you should use the root `mcp_server.py` file directly rather than the files in the `hashnode_mcp` directory. The `hashnode_mcp` directory is primarily for packaging purposes.
 
 ### Available Tools
 
 The server provides the following tools:
 
 - `test_api_connection()`: Test the connection to the Hashnode API
-- `get_publication_posts(host, first=5)`: Get posts from a specific publication
-- `get_publication_id(host)`: Get the publication ID from a hostname
-- `search_posts_of_publication(publication_id, query, first=10)`: Search for posts within a specific publication
-- `search_posts_by_hostname(host, query, first=10)`: Search for posts within a publication using its hostname
+- `create_article(title, body_markdown, tags="", published=False)`: Create and publish a new article on Hashnode
+- `update_article(article_id, title=None, body_markdown=None, tags=None, published=None)`: Update an existing article on Hashnode
+- `get_latest_articles(hostname, limit=10)`: Get the latest articles from a Hashnode publication by hostname
+- `search_articles(query, page=1)`: Search for articles on Hashnode
 - `get_article_details(article_id)`: Get detailed information about a specific article
-- `get_articles_by_username(username)`: Get articles written by a specific user [Coming Soon]
-- `get_user_info(username)`: Get information about a Dev.to user [Coming Soon]
-- `create_article(title, body_markdown, tags, published)`: Create and publish a new article
-- `update_article(article_id, title, body_markdown, tags, published)`: Update an existing article
-- `toggle_follow(username)`: Follow or unfollow a user based on the specified username
-- `publish_draft(draft_id)`: Publish a draft with the specified ID
-- `create_webhook(publication_host, url, events, secret)`: Create a webhook for the publication
+- `get_user_info(username)`: Get information about a Hashnode user
 
 ### Example Usage
 
@@ -75,21 +88,31 @@ client = MCPClient("http://localhost:8000")
 result = client.use_tool("test_api_connection")
 print(result)
 
-# Get posts from a publication
-posts = client.use_tool("get_publication_posts", {"host": "blog.example.com", "first": 10})
-print(posts)
+# Get the latest articles from a publication
+latest_articles = client.use_tool("get_latest_articles", {
+    "hostname": "blog.example.com",
+    "limit": 10
+})
+print(latest_articles)
 
-# Search for posts
-search_results = client.use_tool("search_posts_by_hostname", {
-    "host": "blog.example.com",
+# Search for articles
+search_results = client.use_tool("search_articles", {
     "query": "python",
-    "first": 5
+    "page": 1
 })
 print(search_results)
 
 # Get detailed information about a specific article
-article_details = client.use_tool("get_article_details", {"article_id": "123456"})
+article_details = client.use_tool("get_article_details", {
+    "article_id": "123456"
+})
 print(article_details)
+
+# Get information about a user
+user_info = client.use_tool("get_user_info", {
+    "username": "johndoe"
+})
+print(user_info)
 
 # Create a new article
 new_article = client.use_tool("create_article", {
@@ -104,31 +127,55 @@ print(new_article)
 updated_article = client.use_tool("update_article", {
     "article_id": "123456",
     "title": "Updated Title",
+    "body_markdown": "# Updated Content\n\nThis article has been updated!",
+    "tags": "python,updated",
     "published": True  # Publish the article
 })
 print(updated_article)
-
-# Follow a user
-follow_result = client.use_tool("toggle_follow", {
-    "username": "johndoe"
-})
-print(follow_result)
-
-# Publish a draft
-published_draft = client.use_tool("publish_draft", {
-    "draft_id": "789012"
-})
-print(published_draft)
-
-# Create a webhook
-webhook = client.use_tool("create_webhook", {
-    "publication_host": "blog.example.com",
-    "url": "https://webhook.site/123456",
-    "events": "post_published,post_updated",
-    "secret": "my_secret_key"
-})
-print(webhook)
 ```
+
+## Configuring MCP on Claude Desktop and Cline VSCode Extension
+
+### Cline VSCode Extension
+
+1. Navigate to the Cline MCP settings file:
+   - Windows: `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
+   - macOS: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings\cline_mcp_settings.json`
+   - Linux: `Unfortunately, Claude Desktop is not available for Linux as of now` (You can use Cline extension instead)
+
+2. Add your Hashnode MCP server configuration:
+   ```json
+   {
+     "mcpServers": {
+       "hashnode": {
+         "command": "/path/to/your/venv/bin/python",
+         "args": [
+           "/path/to/your/hashnode-mcp-server/mcp_server.py"
+         ],
+         "env": {
+           "HASHNODE_PERSONAL_ACCESS_TOKEN": "your-personal-access-token"
+         }
+       }
+     }
+   }
+   ```
+
+### Claude Desktop
+
+1. Navigate to the configuration file:
+   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+2. Add your Hashnode MCP server configuration using the same format as above.
+
+### Troubleshooting Connection Issues
+
+If you encounter connection issues:
+- Verify the server is running
+- Check the paths in your configuration
+- Ensure your environment variables are properly set
+- Check the server logs for any error messages
+- Try restarting both the MCP server and the Claude application
 
 ## Environment Variables
 
@@ -153,6 +200,30 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 The source code for this project is available on GitHub:
 https://github.com/sbmagar13/hashnode-mcp-server
+
+## Technical Architecture
+
+The project is organized with a clean, modular structure:
+
+- `mcp_server.py`: Root server implementation that can be run directly
+- `hashnode_mcp/`: Core package containing the modular functionality
+  - `mcp_server.py`: Package version of the server implementation
+  - `utils.py`: Utility functions for formatting responses and GraphQL queries
+- `examples/`: Example usage scripts
+- `tests/`: Test suite for verifying functionality
+- `run_server.py`: Entry point for running the server using the package version
+
+The server uses asynchronous programming with Python's `asyncio` and `httpx` libraries for efficient API communication. GraphQL queries and mutations are defined as constants, making them easy to maintain and update.
+
+## Future Enhancements
+
+Planned future developments include:
+
+- Additional Hashnode features (comments, series, newsletters)
+- Analytics integration
+- Content optimization
+- Multi-user support
+- Webhook support
 
 ## Acknowledgments
 
