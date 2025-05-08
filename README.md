@@ -54,7 +54,7 @@ Or directly using the root file:
 python mcp_server.py
 ```
 
-The server will start and listen for connections from AI assistants. By default, it runs on `localhost:8000`.
+The server will start and listen for connections from AI assistants. By default, it runs on `localhost:8000` using the Server-Sent Events (SSE) transport protocol.
 
 #### Option 2: Let the MCP integration handle it automatically
 
@@ -76,63 +76,18 @@ The server provides the following tools:
 - `get_article_details(article_id)`: Get detailed information about a specific article
 - `get_user_info(username)`: Get information about a Hashnode user
 
-### Example Usage
+### Using the MCP Server
 
-```python
-from mcp.client import MCPClient
+Once the server is running, you can use it with AI assistants that support the Model Context Protocol (MCP), such as Claude. The assistant will be able to use the tools provided by the server to interact with the Hashnode API.
 
-# Connect to the MCP server
-client = MCPClient("http://localhost:8000")
-
-# Test the API connection
-result = client.use_tool("test_api_connection")
-print(result)
-
-# Get the latest articles from a publication
-latest_articles = client.use_tool("get_latest_articles", {
-    "hostname": "blog.example.com",
-    "limit": 10
-})
-print(latest_articles)
-
-# Search for articles
-search_results = client.use_tool("search_articles", {
-    "query": "python",
-    "page": 1
-})
-print(search_results)
-
-# Get detailed information about a specific article
-article_details = client.use_tool("get_article_details", {
-    "article_id": "123456"
-})
-print(article_details)
-
-# Get information about a user
-user_info = client.use_tool("get_user_info", {
-    "username": "johndoe"
-})
-print(user_info)
-
-# Create a new article
-new_article = client.use_tool("create_article", {
-    "title": "My New Article",
-    "body_markdown": "# Hello World\n\nThis is my first article on Hashnode!",
-    "tags": "python,tutorial,beginners",
-    "published": False  # Save as draft
-})
-print(new_article)
-
-# Update an existing article
-updated_article = client.use_tool("update_article", {
-    "article_id": "123456",
-    "title": "Updated Title",
-    "body_markdown": "# Updated Content\n\nThis article has been updated!",
-    "tags": "python,updated",
-    "published": True  # Publish the article
-})
-print(updated_article)
-```
+The tools can be used to:
+- Test the API connection
+- Create and publish new articles
+- Update existing articles
+- Get the latest articles from a publication
+- Search for articles
+- Get detailed information about specific articles
+- Get information about users
 
 ## Configuring MCP on Claude Desktop and Cline VSCode Extension
 
@@ -209,8 +164,6 @@ The project is organized with a clean, modular structure:
 - `hashnode_mcp/`: Core package containing the modular functionality
   - `mcp_server.py`: Package version of the server implementation
   - `utils.py`: Utility functions for formatting responses and GraphQL queries
-- `examples/`: Example usage scripts
-- `tests/`: Test suite for verifying functionality
 - `run_server.py`: Entry point for running the server using the package version
 
 The server uses asynchronous programming with Python's `asyncio` and `httpx` libraries for efficient API communication. GraphQL queries and mutations are defined as constants, making them easy to maintain and update.
