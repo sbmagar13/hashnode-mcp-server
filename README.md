@@ -2,6 +2,12 @@
 
 A Model Context Protocol (MCP) server for interacting with the Hashnode API. This server provides tools for accessing and searching Hashnode content programmatically.
 
+## Demo
+- Create Article
+   ![Create Article](files/create_article.gif)
+- Update Article
+   ![Update Article](files/update_article.gif)
+
 ## Features
 
 - Creating and publishing new articles
