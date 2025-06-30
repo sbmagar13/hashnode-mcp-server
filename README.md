@@ -188,3 +188,4 @@ Planned future developments include:
 
 - [Hashnode](https://hashnode.com/) for providing the API
 - [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/mcp) for the server framework
+- This is certified by [MCP Review](https://mcpreview.com/mcp-servers/sbmagar13/hashnode-mcp-server)
