@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/sbmagar13-hashnode-mcp-server-badge.png)](https://mseep.ai/app/sbmagar13-hashnode-mcp-server)
+
 # Hashnode MCP Server
 
 A Model Context Protocol (MCP) server for interacting with the Hashnode API. This server provides tools for accessing and searching Hashnode content programmatically.
