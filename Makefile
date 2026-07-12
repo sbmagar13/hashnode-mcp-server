@@ -14,10 +14,15 @@ setup:
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	$(PIP) install -e .
+	$(PIP) install pytest pytest-asyncio
 
 # Install the package
 install:
 	$(PIP) install -e .
+
+# Install test dependencies
+test-deps:
+	$(PIP) install pytest pytest-asyncio
 
 # Run tests
 test:

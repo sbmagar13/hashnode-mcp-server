@@ -62,33 +62,20 @@ This guide will help you get started with the Hashnode MCP Server.
    make run
    ```
 
-2. The server will start and listen for connections on port 8000.
+2. The server uses **stdio transport** by default, which is the standard for MCP servers. It communicates via stdin/stdout with the MCP client (e.g., Claude Desktop, Cline).
 
 ## Using the Server
 
-Once the server is running, you can use it with any MCP client. See the `examples/example_usage.py` file for an example of how to use the server with the MCP client.
-
-```python
-from mcp.client import MCPClient
-
-# Connect to the MCP server
-client = MCPClient("http://localhost:8000")
-
-# Test the API connection
-result = client.use_tool("test_api_connection")
-print(result)
-```
+Once the server is running, you can use it with any MCP client. The server exposes tools for creating, updating, deleting, and searching articles, managing webhooks, and more. See the [README.md](README.md) file for the full list of available tools.
 
 ## Running Tests
 
 Run the tests to ensure everything is working correctly:
-
 ```bash
 pytest
 ```
 
 Alternatively, you can use the Makefile:
-
 ```bash
 make test
 ```
@@ -96,6 +83,5 @@ make test
 ## Next Steps
 
 - Read the [README.md](README.md) file for more information about the project.
-- Check out the [examples](examples/) directory for example usage.
 - Explore the [API documentation](README.md#available-tools) to learn about the available tools.
 - Contribute to the project by following the [contributing guidelines](CONTRIBUTING.md).
